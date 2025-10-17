@@ -50,12 +50,14 @@ MASTER_ALIASES: Dict[str, Tuple[str, ...]] = {
         "lrrp",
         "retail price",
         "price",
+        "fin rrp eur",
     ),
     "wholesale_price": _aliases(
         "whs eur new",
         "whs",
         "cost",
         "wholesale price",
+        "fin whs eur",
     ),
     "title_en": _aliases(
         "article description en",
@@ -208,6 +210,13 @@ class TransformationResult:
 # ---------------------------------------------------------------------------
 
 
+def clean_text_series(series: pd.Series) -> pd.Series:
+    """Return a stripped string Series with placeholder nulls removed."""
+
+    text = series.fillna("").astype(str).str.strip()
+    return text.mask(text.str.lower().isin({"nan", "none"}), "")
+
+
 def prepare_master_dataframe(raw: pd.DataFrame, mapping: Dict[str, Optional[str]], settings: Settings) -> pd.DataFrame:
     df = raw.copy()
     canonical = {}
@@ -216,15 +225,15 @@ def prepare_master_dataframe(raw: pd.DataFrame, mapping: Dict[str, Optional[str]
         column_name = mapping.get(name)
         return df[column_name] if column_name else pd.Series([None] * len(df))
 
-    canonical["sku"] = col("sku").astype(str).str.strip()
-    canonical["design_variation"] = col("design_variation").astype(str).str.strip()
+    canonical["sku"] = clean_text_series(col("sku"))
+    canonical["design_variation"] = clean_text_series(col("design_variation"))
     canonical["retail_price"] = pd.to_numeric(col("retail_price"), errors="coerce")
     canonical["wholesale_price"] = pd.to_numeric(col("wholesale_price"), errors="coerce")
-    canonical["title_en"] = col("title_en").astype(str).str.strip()
-    canonical["title_fi"] = col("title_fi").astype(str).str.strip()
-    canonical["long_description_fi"] = col("long_description_fi").astype(str).str.strip()
-    canonical["short_name_en"] = col("short_name_en").astype(str).str.strip()
-    canonical["barcode"] = col("barcode").astype(str).str.strip()
+    canonical["title_en"] = clean_text_series(col("title_en"))
+    canonical["title_fi"] = clean_text_series(col("title_fi"))
+    canonical["long_description_fi"] = clean_text_series(col("long_description_fi"))
+    canonical["short_name_en"] = clean_text_series(col("short_name_en"))
+    canonical["barcode"] = clean_text_series(col("barcode"))
     canonical["weight_kg"] = pd.to_numeric(col("weight_kg"), errors="coerce")
 
     master = pd.DataFrame(canonical)
@@ -404,7 +413,14 @@ def generate_transformation(
 
                 update_rows.append(record)
 
-        attention = group[(group["retail_price"].isna()) | (group["retail_price"] == 0) | (group["wholesale_price"].isna()) | (group["wholesale_price"] == 0)]
+        retail_invalid = group["retail_price"].isna() | (group["retail_price"] <= 0)
+        wholesale_invalid = group["wholesale_price"].isna() | (group["wholesale_price"] <= 0)
+        barcode_clean = clean_text_series(group["barcode"])
+        barcode_numeric = pd.to_numeric(barcode_clean, errors="coerce")
+        barcode_invalid = barcode_clean.eq("") | (barcode_numeric <= 0)
+
+        attention_mask = retail_invalid | wholesale_invalid | barcode_invalid
+        attention = group[attention_mask]
         for _, row in attention.iterrows():
             needs_attention_rows.append(
                 {
@@ -412,6 +428,7 @@ def generate_transformation(
                     "Design variation": design_key,
                     "Retail price": row["retail_price"],
                     "Wholesale price": row["wholesale_price"],
+                    "Barcode": barcode_clean.loc[row.name],
                 }
             )
 
