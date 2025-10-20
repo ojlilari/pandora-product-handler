@@ -8,9 +8,18 @@ safe updates, removals, sync reporting, and data quality checks.
 ## Quick start
 
 ```bash
-pip install streamlit pandas openpyxl
+pip install -r requirements.txt
 streamlit run pandora_matrixify_streamlit_hardened.py
 ```
+
+## Deploying to Streamlit Community Cloud
+
+1. Push this repository to GitHub (public or private).
+2. Sign in at [streamlit.io/cloud](https://streamlit.io/cloud) and choose **New app**.
+3. Select the repository and branch, then set the entry point to
+   `pandora_matrixify_streamlit_hardened.py`.
+4. Streamlit Cloud automatically installs dependencies from `requirements.txt`.
+5. Once the build finishes, share the generated public URL with collaborators.
 
 ## Usage
 
@@ -27,4 +36,3 @@ streamlit run pandora_matrixify_streamlit_hardened.py
 
 The primary entry point for the transformation logic and Streamlit UI is
 `pandora_matrixify_streamlit_hardened.py`.
-
